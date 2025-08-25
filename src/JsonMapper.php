@@ -247,7 +247,7 @@ class JsonMapper
                 $this->setProperty($object, $accessor, $jvalue);
                 continue;
             } else if ($jsonProperty->isSimpleType
-                && $jsonProperty->hasVariadicArrayType && !(is_array($jvalue))
+                && !($jsonProperty->hasVariadicArrayType && is_array($jvalue))
             ) {
                 if ($jsonProperty->isFlatType
                     && !$this->isFlatType(gettype($jvalue))
