@@ -176,10 +176,11 @@ class JsonMapper
             // again for subsequent objects of the same type
             if (!isset($this->arInspectedClasses[$strClassName][$key])) {
                 $this->arInspectedClasses[$strClassName][$key]
-                    = $this->inspectProperty($rc, $key);
+                    = $this->inspectBuildProperty($rc, $key);
             }
 
-            list($hasProperty, $accessor, $type, $isNullable)
+            /** @var JsonProperty $jsonProperty */
+            list($hasProperty, $accessor, $type, $isNullable, $jsonProperty)
                 = $this->arInspectedClasses[$strClassName][$key];
 
             if (!$hasProperty) {
@@ -195,8 +196,8 @@ class JsonMapper
                     );
 
                     if (is_string($undefinedPropertyKey)) {
-                        list($hasProperty, $accessor, $type, $isNullable)
-                            = $this->inspectProperty($rc, $undefinedPropertyKey);
+                        list($hasProperty, $accessor, $type, $isNullable, $jsonProperty)
+                            = $this->inspectBuildProperty($rc, $undefinedPropertyKey);
                     }
                 } else {
                     $this->log(
@@ -231,16 +232,12 @@ class JsonMapper
                     $this->setProperty($object, $accessor, null);
                     continue;
                 }
-                $type = $this->removeNullable($type);
             } else if ($jvalue === null) {
                 throw new JsonMapper_Exception(
                     'JSON property "' . $key . '" in class "'
                     . $strClassName . '" must not be NULL'
                 );
             }
-
-            $type = $this->getFullNamespace($type, $strNs);
-            $type = $this->getMappedType($type, $jvalue);
 
             if ($type === null || $type === 'mixed') {
                 //no given type - simply set the json data
@@ -249,10 +246,10 @@ class JsonMapper
             } else if ($this->isObjectOfSameType($type, $jvalue)) {
                 $this->setProperty($object, $accessor, $jvalue);
                 continue;
-            } else if ($this->isSimpleType($type)
-                && !(is_array($jvalue) && $this->hasVariadicArrayType($accessor))
+            } else if ($jsonProperty->isSimpleType
+                && !(is_array($jvalue) && $jsonProperty->hasVariadicArrayType)
             ) {
-                if ($this->isFlatType($type)
+                if ($jsonProperty->isFlatType
                     && !$this->isFlatType(gettype($jvalue))
                 ) {
                     throw new JsonMapper_Exception(
@@ -282,18 +279,18 @@ class JsonMapper
 
             $array = null;
             $subtype = null;
-            if ($this->isArrayOfType($type)) {
+            if ($jsonProperty->isArrayOfType) {
                 //array
                 $array = array();
                 $subtype = substr($type, 0, -2);
-            } else if (substr($type, -1) == ']') {
+            } else if ($jsonProperty->isParenthesesEnd) {
                 list($proptype, $subtype) = explode('[', substr($type, 0, -1));
                 if ($proptype == 'array') {
                     $array = array();
                 } else {
                     $array = $this->createInstance($proptype, false, $jvalue);
                 }
-            } else if (is_array($jvalue) && $this->hasVariadicArrayType($accessor)) {
+            } else if (is_array($jvalue) && $jsonProperty->hasVariadicArrayType) {
                 $array = array();
                 $subtype = $type;
             } else {
@@ -512,6 +509,24 @@ class JsonMapper
         return $array;
     }
 
+    protected function inspectBuildProperty(ReflectionClass $rc, $name)
+    {
+        list($hasProperty, $accessor, $type, $isNullable) = $this->inspectProperty($rc, $name);
+        $jsonProperty = new JsonProperty();
+        if ($isNullable || !$this->bStrictNullTypes) {
+            $type = $this->removeNullable($type);
+        }
+        $strNs                              = $rc->getNamespaceName();
+        $type                               = $this->getFullNamespace($type, $strNs);
+        $jsonProperty->isSimpleType         = $this->isSimpleType($type);
+        $jsonProperty->hasVariadicArrayType = $this->hasVariadicArrayType($accessor);
+        $jsonProperty->isFlatType           = $this->isFlatType($type);
+
+        $jsonProperty->isArrayOfType    = $this->isArrayOfType($type);
+        $jsonProperty->isParenthesesEnd = substr($type, -1) == ']';
+
+        return array($hasProperty, $accessor, $type, $isNullable, $jsonProperty);
+    }
     /**
      * Try to find out if a property exists in a given class.
      * Checks property first, falls back to setter method.
