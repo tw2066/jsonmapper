@@ -522,8 +522,10 @@ class JsonMapper
         $jsonProperty->hasVariadicArrayType = $this->hasVariadicArrayType($accessor);
         $jsonProperty->isFlatType           = $this->isFlatType($type);
 
-        $jsonProperty->isArrayOfType    = $this->isArrayOfType($type);
-        $jsonProperty->isParenthesesEnd = substr($type, -1) == ']';
+        if (is_string($type)) {
+            $jsonProperty->isArrayOfType    = $this->isArrayOfType($type);
+            $jsonProperty->isParenthesesEnd = substr($type, -1) == ']';
+        }
 
         return array($hasProperty, $accessor, $type, $isNullable, $jsonProperty);
     }
